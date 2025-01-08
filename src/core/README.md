@@ -1,10 +1,13 @@
 # Core Business Logic
 
-Core business logic and domain models.
+Central business rules and processes:
+- Deal matching
+- Price negotiations
+- Market analysis
+- Transaction processing
 
 ## Components
-
-- User Management
-- Product Catalog
-- Market Analysis
-- Deal Management
+- Business rules engine
+- Workflow management
+- State machines
+- Event processing

@@ -1,11 +1,14 @@
-# API Components
+# API Layer
 
-REST API endpoints and service interfaces.
+REST API endpoints for:
+- Market opportunities
+- User management
+- Negotiations
+- Product listings
+- Analytics
 
-## Endpoints
-
-- /opportunities
-- /negotiations
-- /notifications
-- /users
-- /products
+## Features
+- Authentication
+- Rate limiting
+- Response caching
+- API versioning
