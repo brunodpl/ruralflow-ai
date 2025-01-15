@@ -2,63 +2,80 @@
 
 The Collector Agent is responsible for managing product intake and inventory organization in the RuralFlow AI system.
 
-## Features
+## Components
 
-1. Data Validation
-   - Ensures completeness of user and product information
-   - Validates data types and values
+### 1. CollectorAgent (CollectorAgent.py)
+- Main agent implementation
+- Handles product intake processing
+- Manages inventory organization
+- Validates data
+- Generates product labels
+- Interacts with other agents
 
-2. Product Labeling
-   - Generates unique product IDs
-   - Creates detailed labels with all necessary metadata
-   - Maintains a searchable label database
+### 2. Database Manager (database_manager.py)
+- Manages database operations
+- Handles producer and product records
+- Tracks inventory levels
+- Provides inventory queries and updates
 
-3. Inventory Management
-   - Organizes products by category and subcategory
-   - Tracks quantities and units
-   - Maintains user associations
+## Database Schema
 
-4. Logging and Tracking
-   - Records all processed items
-   - Maintains audit trail
-   - Generates inventory summaries
+### Producers
+- id: Primary key
+- name: Producer name
+- location: Geographic location
+- contact: Contact information
+- metadata: Additional producer data
+
+### Products
+- id: Primary key
+- producer_id: Foreign key to producers
+- name: Product name
+- category: Product category
+- subcategory: Product subcategory
+- unit: Unit of measurement
+- metadata: Additional product data
+
+### Inventory
+- id: Primary key
+- product_id: Foreign key to products
+- quantity: Current quantity
+- last_updated: Last update timestamp
 
 ## Usage Example
 
 ```python
-# Initialize the Collector Agent
-collector = CollectorAgent()
+from collector.CollectorAgent import CollectorAgent
 
-# Process a new product
-result = collector.process_new_entry({
-    'user_name': 'María García',
-    'product_name': 'Mountain Wildflower Honey',
+# Initialize the agent
+agent = CollectorAgent()
+
+# Add a new producer
+producer_data = {
+    'name': 'María García',
+    'location': 'Lugo, Galicia',
+    'contact': '+34 600 000 000'
+}
+producer = agent.add_producer(producer_data)
+
+# Add a new product
+product_data = {
+    'name': 'Mountain Wildflower Honey',
     'category': 'Honey',
     'subcategory': 'Wildflower',
-    'quantity': 50.0,
     'unit': 'kg',
-    'region': 'Galicia'
-})
+    'metadata': {
+        'origin': 'Mountain range',
+        'harvest_season': 'Summer 2024'
+    }
+}
+product = agent.add_product(product_data, producer.id)
 
-# Get inventory summary
-summary = collector.get_inventory_summary()
-```
+# Update inventory
+agent.update_inventory(product.id, quantity=50.0)
 
-## Data Structures
-
-### Product Label
-```python
-@dataclass
-class ProductLabel:
-    product_id: str        # Unique identifier
-    product_name: str      # Name of the product
-    category: str         # Main category
-    subcategory: str      # Subcategory
-    user_name: str        # Producer name
-    timestamp: datetime   # Entry timestamp
-    quantity: float       # Product quantity
-    unit: str            # Unit of measurement
-    region: str          # Geographic region
+# Get inventory status
+inventory = agent.get_producer_inventory(producer.id)
 ```
 
 ## Error Handling
@@ -66,9 +83,12 @@ class ProductLabel:
 The agent provides detailed error messages for:
 - Missing required fields
 - Invalid data types
-- Invalid quantities
-- Unknown product IDs
+- Database operation failures
+- Invalid inventory operations
 
-## Integration
+## Security
 
-The Collector Agent is designed to work seamlessly with other RuralFlow AI agents, particularly the Manager Agent.
+- All database operations use connection pooling
+- Transactions are automatically managed with rollback support
+- Input validation before database operations
+- Audit trail through timestamps
