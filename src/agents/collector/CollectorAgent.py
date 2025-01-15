@@ -1,133 +1,159 @@
+from typing import Dict, Any, List, Optional
 from datetime import datetime
-from typing import Dict, List, Optional
-import uuid
-from dataclasses import dataclass
-
-@dataclass
-class ProductLabel:
-    product_id: str
-    product_name: str
-    category: str
-    subcategory: str
-    user_name: str
-    timestamp: datetime
-    quantity: float
-    unit: str
-    region: str
+from .database_manager import CollectorDatabaseManager
+from ...database.models import Producer, Product, Inventory
 
 class CollectorAgent:
     def __init__(self):
-        self.inventory = {}
-        self.labels = {}
-        self.processed_items_log = []
+        self.db_manager = CollectorDatabaseManager()
         
-    def generate_product_id(self, category: str) -> str:
-        """Generate a unique product ID based on category and UUID"""
-        return f"{category[:3].upper()}-{str(uuid.uuid4())[:8]}"
-    
-    def validate_data(self, data: Dict) -> tuple[bool, Optional[str]]:
-        """Validate incoming data for completeness"""
-        required_fields = [
-            'user_name', 'product_name', 'category', 
-            'subcategory', 'quantity', 'unit', 'region'
-        ]
-        
+    def validate_producer_data(self, data: Dict[str, Any]) -> None:
+        """Validate producer data before database insertion"""
+        required_fields = ['name', 'location']
         for field in required_fields:
             if field not in data:
-                return False, f"Missing required field: {field}"
-                
-        if not isinstance(data['quantity'], (int, float)) or data['quantity'] <= 0:
-            return False, "Invalid quantity value"
+                raise ValueError(f'Missing required field: {field}')
+        
+        if not isinstance(data['name'], str) or not data['name'].strip():
+            raise ValueError('Producer name must be a non-empty string')
             
-        return True, None
-    
-    def create_label(self, data: Dict, product_id: str) -> ProductLabel:
-        """Create a product label with all necessary information"""
-        return ProductLabel(
-            product_id=product_id,
-            product_name=data['product_name'],
-            category=data['category'],
-            subcategory=data['subcategory'],
-            user_name=data['user_name'],
-            timestamp=datetime.now(),
-            quantity=data['quantity'],
-            unit=data['unit'],
-            region=data['region']
-        )
-    
-    def process_new_entry(self, data: Dict) -> Dict:
-        """Process a new product entry"""
-        # Validate data
-        is_valid, error = self.validate_data(data)
-        if not is_valid:
-            return {
-                'status': 'error',
-                'message': error
-            }
+    def validate_product_data(self, data: Dict[str, Any]) -> None:
+        """Validate product data before database insertion"""
+        required_fields = ['name', 'category', 'unit']
+        for field in required_fields:
+            if field not in data:
+                raise ValueError(f'Missing required field: {field}')
         
-        # Generate product ID
-        product_id = self.generate_product_id(data['category'])
-        
-        # Create label
-        label = self.create_label(data, product_id)
-        
-        # Update inventory
-        category_key = f"{data['category']}/{data['subcategory']}"
-        if category_key not in self.inventory:
-            self.inventory[category_key] = []
-        
-        self.inventory[category_key].append({
-            'product_id': product_id,
-            'user_name': data['user_name'],
-            'quantity': data['quantity'],
-            'unit': data['unit'],
-            'timestamp': datetime.now()
-        })
-        
-        # Store label
-        self.labels[product_id] = label
-        
-        # Log the processed item
-        self.processed_items_log.append({
-            'product_id': product_id,
-            'action': 'new_entry',
-            'timestamp': datetime.now(),
-            'details': data
-        })
-        
-        return {
-            'status': 'success',
-            'product_id': product_id,
-            'message': 'Product successfully processed and labeled',
-            'label': label
-        }
-    
-    def get_inventory_summary(self) -> Dict:
-        """Generate a summary of current inventory"""
-        summary = {
-            'total_products': sum(len(products) for products in self.inventory.values()),
-            'categories': {}
-        }
-        
-        for category_key, products in self.inventory.items():
-            category, subcategory = category_key.split('/')
-            if category not in summary['categories']:
-                summary['categories'][category] = {}
+        if not isinstance(data['name'], str) or not data['name'].strip():
+            raise ValueError('Product name must be a non-empty string')
             
-            summary['categories'][category][subcategory] = {
-                'product_count': len(products),
-                'total_quantity': sum(p['quantity'] for p in products)
-            }
+    def add_producer(self, data: Dict[str, Any]) -> Producer:
+        """Add a new producer to the system
         
-        return summary
+        Args:
+            data: Dictionary containing producer information
+                - name: Producer's name (required)
+                - location: Geographic location (required)
+                - contact: Contact information (optional)
+                - metadata: Additional data (optional)
+        
+        Returns:
+            Producer object
+        
+        Raises:
+            ValueError: If required fields are missing or invalid
+        """
+        self.validate_producer_data(data)
+        return self.db_manager.add_producer(data)
     
-    def get_product_details(self, product_id: str) -> Optional[Dict]:
-        """Retrieve detailed information about a specific product"""
-        if product_id in self.labels:
-            label = self.labels[product_id]
+    def add_product(self, data: Dict[str, Any], producer_id: int) -> Product:
+        """Add a new product to the system
+        
+        Args:
+            data: Dictionary containing product information
+                - name: Product name (required)
+                - category: Product category (required)
+                - subcategory: Product subcategory (optional)
+                - unit: Unit of measurement (required)
+                - metadata: Additional data (optional)
+            producer_id: ID of the producer
+        
+        Returns:
+            Product object
+        
+        Raises:
+            ValueError: If required fields are missing or invalid
+        """
+        self.validate_product_data(data)
+        return self.db_manager.add_product(data, producer_id)
+    
+    def update_inventory(self, product_id: int, quantity: float, operation: str = 'add') -> Inventory:
+        """Update product inventory
+        
+        Args:
+            product_id: ID of the product
+            quantity: Quantity to add/subtract/set
+            operation: Type of operation ('add', 'subtract', or 'set')
+        
+        Returns:
+            Updated Inventory object
+        
+        Raises:
+            ValueError: If quantity is invalid or operation not supported
+        """
+        if quantity < 0 and operation != 'subtract':
+            raise ValueError('Quantity must be non-negative')
+            
+        if operation not in ['add', 'subtract', 'set']:
+            raise ValueError('Invalid operation. Must be add, subtract, or set')
+            
+        return self.db_manager.update_inventory(product_id, quantity, operation)
+    
+    def get_producer_inventory(self, producer_id: int) -> List[Dict[str, Any]]:
+        """Get inventory status for all products of a producer
+        
+        Args:
+            producer_id: ID of the producer
+        
+        Returns:
+            List of dictionaries containing inventory information
+        """
+        return self.db_manager.get_producer_inventory(producer_id)
+    
+    def get_product_inventory(self, product_id: int) -> Optional[Dict[str, Any]]:
+        """Get inventory status for a specific product
+        
+        Args:
+            product_id: ID of the product
+        
+        Returns:
+            Dictionary containing inventory information or None if not found
+        """
+        return self.db_manager.get_product_inventory(product_id)
+    
+    def process_manager_instruction(self, instruction: Dict[str, Any]) -> Dict[str, Any]:
+        """Process instructions from the Manager Agent
+        
+        Args:
+            instruction: Dictionary containing manager instructions
+                - action: Type of action ('add_producer', 'add_product', 'update_inventory')
+                - data: Data for the action
+        
+        Returns:
+            Dictionary containing the result of the operation
+        
+        Raises:
+            ValueError: If instruction format is invalid
+        """
+        if 'action' not in instruction:
+            raise ValueError('Missing action in manager instruction')
+            
+        action = instruction['action']
+        data = instruction.get('data', {})
+        
+        if action == 'add_producer':
+            producer = self.add_producer(data)
+            return {'status': 'success', 'producer_id': producer.id}
+            
+        elif action == 'add_product':
+            if 'producer_id' not in data:
+                raise ValueError('Missing producer_id in product data')
+            product = self.add_product(data, data['producer_id'])
+            return {'status': 'success', 'product_id': product.id}
+            
+        elif action == 'update_inventory':
+            if not all(k in data for k in ['product_id', 'quantity']):
+                raise ValueError('Missing required fields in inventory update')
+            inventory = self.update_inventory(
+                data['product_id'],
+                data['quantity'],
+                data.get('operation', 'add')
+            )
             return {
-                'label': label,
-                'history': [log for log in self.processed_items_log 
-                           if log['product_id'] == product_id]
+                'status': 'success',
+                'product_id': inventory.product_id,
+                'new_quantity': inventory.quantity
             }
-        return None
+            
+        else:
+            raise ValueError(f'Unknown action: {action}')
